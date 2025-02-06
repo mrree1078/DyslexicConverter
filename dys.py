@@ -33,7 +33,7 @@ COLOR_FILTERS = {
     'Dark Mode': ('#FFFFFF', '#1A1A1A')
 }
 
-FONT_OPTIONS = ['Arial'] # Arial only as per user's request - can be expanded
+FONT_OPTIONS = ['Arial']  # Arial only as per user's request - can be expanded
 
 # --- Font Configuration ---
 def configure_fonts_app():
@@ -108,10 +108,13 @@ def create_pdf_document(text, settings):
         canvas.rect(0, 0, doc.width, doc.height, fill=1)
         canvas.restoreState()
 
-    doc.build(content, onFirstPage=add_background, onLaterPages=add_background)
+    try:
+        doc.build(content, onFirstPage=add_background, onLaterPages=add_background)
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate PDF: {e}")
+
     buffer.seek(0)
     return buffer.getvalue()
-
 
 def read_document_file(uploaded_file):
     """Reads text from DOCX or PDF files."""
@@ -119,10 +122,10 @@ def read_document_file(uploaded_file):
     error = None
     file_type = uploaded_file.type
     try:
-        if file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document": # DOCX
+        if file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":  # DOCX
             doc = Document(uploaded_file)
             text = "\n\n".join([paragraph.text for paragraph in doc.paragraphs])
-        elif file_type == "application/pdf": # PDF
+        elif file_type == "application/pdf":  # PDF
             pdf_doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             text = "\n\n".join([page.get_text() for page in pdf_doc])
         else:
@@ -158,18 +161,21 @@ with st.sidebar:
     st.markdown("**Instructions**")
     st.markdown("1. Upload document\n2. Adjust settings\n3. Preview updates automatically\n4. Download PDF")
 
-
 # --- Main Interface ---
 uploaded_file = st.file_uploader("Upload DOCX/PDF", type=['docx', 'pdf'])
 
 if uploaded_file:
-    st.session_state.error_message = None # Clear previous error
+    st.session_state.error_message = None  # Clear previous error
     text, read_error = read_document_file(uploaded_file)
+    
     if read_error:
         st.session_state.error_message = read_error
-        st.error(read_error)
-        st.session_state.pdf_bytes = None # Disable download button
-    elif text:
+        st.session_state.pdf_bytes = None
+    elif not text.strip():
+        st.session_state.error_message = "The document contains no text."
+        st.session_state.pdf_bytes = None
+    else:
+        # Generate preview
         preview_content = []
         processed_preview = process_text_for_preview(text)
         for bold, normal in processed_preview:
@@ -186,11 +192,19 @@ if uploaded_file:
             f'{"".join(preview_content)}</div>',
             unsafe_allow_html=True
         )
+        
+        # Generate PDF
+        try:
+            st.session_state.pdf_bytes = create_pdf_document(text, st.session_state.settings)
+        except Exception as e:
+            st.session_state.error_message = str(e)
+            st.session_state.pdf_bytes = None
 
-        # PDF is generated automatically whenever settings or text changes
-        st.session_state.pdf_bytes = create_pdf_document(text, st.session_state.settings)
-    else:
-        st.session_state.pdf_bytes = None # No text, disable download button
-else:
+    # Display error message if any
     if st.session_state.error_message:
-        st.error(st.session_state.error_message) # Show persistent error message if any
+        st.error(st.session_state.error_message)
+
+else:
+    st.session_state.pdf_bytes = None
+    if st.session_state.error_message:
+        st.error(st.session_state.error_message)
