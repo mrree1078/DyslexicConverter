@@ -66,8 +66,8 @@ def process_text_for_preview(text):
 # --- PDF Generation ---
 def create_pdf_document(text, settings):
     if uploaded_file:
-    st.session_state.error_message = None # Clear previous error
-    text, read_error = read_document_file(uploaded_file)
+        st.session_state.error_message = None # Clear previous error
+        text, read_error = read_document_file(uploaded_file)
     if read_error:
         st.session_state.error_message = read_error
         st.error(read_error)
