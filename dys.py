@@ -65,6 +65,7 @@ def process_text_for_preview(text):
 
 # --- PDF Generation ---
 def create_pdf_document(text, settings):
+    st.write("**Debugging create_pdf_document: STARTING PDF GENERATION**") # DEBUG LINE
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = ParagraphStyle(
@@ -102,6 +103,7 @@ def create_pdf_document(text, settings):
 
     doc.build(content, onFirstPage=add_background, onLaterPages=add_background)
     pdf_bytes = buffer.getvalue()
+    st.write("**Debugging create_pdf_document: PDF BYTES GENERATED, returning**") # DEBUG LINE
     return pdf_bytes
 
 # --- File Reading ---
@@ -161,6 +163,7 @@ if uploaded_file:
         st.error(read_error)
         st.session_state.pdf_bytes = None # Disable download button
     elif text:
+        st.write("**Debugging: read_document_file successful, text length:", len(text)) # DEBUG LINE
         preview_content = []
         processed_preview = process_text_for_preview(text)
         for bold, normal in processed_preview:
@@ -178,12 +181,13 @@ if uploaded_file:
             unsafe_allow_html=True
         )
 
-        try:
-            st.session_state.pdf_bytes = create_pdf_document(text, st.session_state.settings)
-        except Exception as e:
-            st.session_state.error_message = f"Error generating PDF: {e}"
-            st.error(st.session_state.error_message)
-            st.session_state.pdf_bytes = None # Disable download button
+        st.write("**Debugging: Calling create_pdf_document NOW...") # DEBUG LINE
+        pdf_bytes = create_pdf_document(text, st.session_state.settings)
+        st.write("**Debugging: create_pdf_document RETURNED, pdf_bytes is:", pdf_bytes is not None) # DEBUG LINE
+        st.session_state.pdf_bytes = pdf_bytes # Assign pdf_bytes to session state
+        st.write("**Debugging: st.session_state.pdf_bytes AFTER ASSIGNMENT is:", st.session_state.pdf_bytes is not None) # DEBUG LINE
+
+
     else:
         st.session_state.pdf_bytes = None # No text, disable download button
 else:
