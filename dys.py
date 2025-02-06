@@ -29,15 +29,13 @@ COLOR_FILTERS = {
     'Dark Mode': ('#FFFFFF', '#1A1A1A')
 }
 
-FONT_OPTIONS = ['Arial', 'OpenDyslexic', 'ComicSans']
+FONT_OPTIONS = ['Arial']
 
 def configure_fonts():
     """Register fonts with fallback handling"""
     try:
         pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf'))
         pdfmetrics.registerFont(TTFont('Arial-Bold', 'arialbd.ttf'))
-        pdfmetrics.registerFont(TTFont('OpenDyslexic', 'OpenDyslexic-Regular.otf'))
-        pdfmetrics.registerFont(TTFont('ComicSans', 'comic.ttf'))
     except:
         st.warning("Some fonts not found - using defaults")
 
@@ -193,16 +191,14 @@ if uploaded_file:
         # PDF is generated automatically whenever settings or text changes
         st.session_state.pdf_bytes = create_pdf(text, st.session_state.settings)
 
-        if 'pdf_bytes' in st.session_state:
-            st.sidebar.download_button(
-                "Download PDF",
-                st.session_state.pdf_bytes,
-                "document.pdf",
-                "application/pdf"
-            )
 
 # Instructions sidebar
 with st.sidebar:
     st.markdown("---")
     st.markdown("**Instructions**")
     st.markdown("1. Upload document\n2. Adjust settings\n3. Preview updates automatically\n4. Download PDF")
+    st.sidebar.download_button(
+                "Download PDF",
+                st.session_state.pdf_bytes,
+                "document.pdf",
+                "application/pdf"
