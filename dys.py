@@ -11,7 +11,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
 
-# Initialize session state
+# --- Initialize session state ---
 if 'settings' not in st.session_state:
     st.session_state.settings = {
         'text_size': 12,
@@ -21,6 +21,10 @@ if 'settings' not in st.session_state:
         'text_color': '#000000',
         'current_font': 'Arial',
     }
+if 'pdf_bytes' not in st.session_state:
+    st.session_state.pdf_bytes = None
+if 'error_message' not in st.session_state:
+    st.session_state.error_message = None
 
 COLOR_FILTERS = {
     'Default': ('#000000', '#FFFFFF'),
@@ -29,36 +33,41 @@ COLOR_FILTERS = {
     'Dark Mode': ('#FFFFFF', '#1A1A1A')
 }
 
-FONT_OPTIONS = ['Arial']
+FONT_OPTIONS = ['Arial'] # Arial only as per user's latest code
 
-def configure_fonts():
-    """Register fonts with fallback handling"""
+# --- Font Configuration ---
+def configure_fonts_app():
     try:
         pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf'))
         pdfmetrics.registerFont(TTFont('Arial-Bold', 'arialbd.ttf'))
-    except:
-        st.warning("Some fonts not found - using defaults")
+    except Exception as e:
+        st.warning(f"Font configuration issue: {e}. Using default fonts.")
 
-def process_word(word):
-    """Process words with current settings - bolding first half"""
+# --- Text Processing ---
+def process_word_app(word):
     clean_word = re.sub(r'^\W+|\W+$', '', word)
     if not clean_word:
         return (word, '')
-
     split = (len(clean_word) + 1) // 2
     bold = clean_word[:split]
     normal = clean_word[split:] + word[len(clean_word):]
     return (bold, normal)
 
-def create_pdf(text, settings):
-    """PDF generation with character spacing, no margins"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=letter,
-    )
+def process_text_for_preview(text):
+    processed_text = []
+    words = re.findall(r'\S+|\s+', text)
+    for word in words:
+        if word.strip() == '':
+            processed_text.append(("", word))
+        else:
+            processed_text.append(process_word_app(word))
+    return processed_text
 
-    style = ParagraphStyle(
+# --- PDF Generation ---
+def create_pdf_document(text, settings):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = ParagraphStyle(
         'MainStyle',
         fontName=settings['current_font'],
         fontSize=settings['text_size'],
@@ -68,12 +77,10 @@ def create_pdf(text, settings):
         alignment=TA_LEFT,
         splitLongWords=False,
         spaceBefore=settings['text_size'] * 0.5,
-        charSpace=settings['char_spacing'] # Character spacing setting is here
+        charSpace=settings['char_spacing']
     )
-
     content = []
     paragraphs = text.split("\n\n")
-
     for para_text in paragraphs:
         processed_words = []
         words = re.findall(r'\S+|\s+', para_text)
@@ -81,11 +88,10 @@ def create_pdf(text, settings):
             if word.strip() == '':
                 processed_words.append(word)
             else:
-                bold, normal = process_word(word)
+                bold, normal = process_word_app(word)
                 processed_words.append(f'<font name="{settings["current_font"]}-Bold">{bold}</font>{normal}')
-
         paragraph_content = ''.join(processed_words)
-        content.append(Paragraph(paragraph_content, style))
+        content.append(Paragraph(paragraph_content, styles))
         content.append(Spacer(1, 6))
 
     def add_background(canvas, doc):
@@ -95,84 +101,69 @@ def create_pdf(text, settings):
         canvas.restoreState()
 
     doc.build(content, onFirstPage=add_background, onLaterPages=add_background)
-    buffer.seek(0)
-    return buffer.getvalue()
+    pdf_bytes = buffer.getvalue()
+    return pdf_bytes
 
-
-def read_file(uploaded_file):
-    """Reads text from DOCX or PDF files."""
+# --- File Reading ---
+def read_document_file(uploaded_file):
+    text = None
+    error = None
     file_type = uploaded_file.type
-    if file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document": # DOCX
-        try:
-            document = Document(uploaded_file)
-            text = ""
-            for paragraph in document.paragraphs:
-                text += paragraph.text + "\n\n"
-            return text
-        except Exception as e:
-            st.error(f"Error reading DOCX file: {e}")
-            return None
-    elif file_type == "application/pdf": # PDF
-        try:
-            pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            text = ""
-            for page in pdf_document:
-                text += page.get_text() + "\n\n"
-            return text
-        except Exception as e:
-            st.error(f"Error reading PDF file: {e}")
-            return None
-    else:
-        st.error("Unsupported file type. Please upload DOCX or PDF.")
-        return None
-
-def process_text(text):
-    """Processes the entire text into bold and normal word parts for preview."""
-    processed_text = []
-    words = re.findall(r'\S+|\s+', text)
-    for word in words:
-        if word.strip() == '':
-            processed_text.append(("", word))
+    try:
+        if file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document": # DOCX
+            doc = Document(uploaded_file)
+            text = "\n\n".join([paragraph.text for paragraph in doc.paragraphs])
+        elif file_type == "application/pdf": # PDF
+            pdf_doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+            text = "\n\n".join([page.get_text() for page in pdf_doc])
         else:
-            processed_text.append(process_word(word))
-    return processed_text
+            error = "Unsupported file type. Please upload DOCX or PDF."
+    except Exception as e:
+        error = f"Error reading file: {e}"
+    return text, error
 
-
-# Streamlit UI
+# --- Streamlit UI ---
 st.title("Accessibility Document Converter")
-configure_fonts()
+configure_fonts_app()
 
-# Sidebar controls
+# --- Sidebar Controls ---
 with st.sidebar:
     st.header("Document Settings")
-
-    st.session_state.settings['current_font'] = st.selectbox(
-        "Font Style",
-        FONT_OPTIONS,
-        index=FONT_OPTIONS.index(st.session_state.settings['current_font'])
-    )
-
+    st.session_state.settings['current_font'] = st.selectbox("Font Style", FONT_OPTIONS, index=FONT_OPTIONS.index(st.session_state.settings['current_font']))
     color_preset = st.selectbox("Color Theme", list(COLOR_FILTERS.keys()))
     text_color, bg_color = COLOR_FILTERS[color_preset]
-    st.session_state.settings.update({
-        'text_color': text_color,
-        'bg_color': bg_color
-    })
+    st.session_state.settings.update({'text_color': text_color, 'bg_color': bg_color})
+    st.session_state.settings['text_size'] = st.slider("Text Size (pt)", 8, 24, st.session_state.settings['text_size'])
+    st.session_state.settings['line_spacing'] = st.slider("Line Spacing", 1.0, 3.0, st.session_state.settings['line_spacing'], 0.25)
+    st.session_state.settings['char_spacing'] = st.slider("Character Spacing (pt)", 0, 5, st.session_state.settings['char_spacing'])
 
-    st.session_state.settings['text_size'] = st.slider("Text Size (pt)", 8, 24, 12)
-    st.session_state.settings['line_spacing'] = st.slider("Line Spacing", 1.0, 3.0, 2.0, 0.25)
-    st.session_state.settings['char_spacing'] = st.slider("Character Spacing (pt)", 0, 5, 1)
+    st.download_button(
+        label="Download PDF",
+        data=st.session_state.pdf_bytes if st.session_state.pdf_bytes else b'',
+        file_name="document.pdf",
+        mime="application/pdf",
+        disabled=st.session_state.pdf_bytes is None
+    )
 
-# Main interface
+    st.markdown("---")
+    st.markdown("**Instructions**")
+    st.markdown("1. Upload document\n2. Adjust settings\n3. Preview updates automatically\n4. Download PDF")
+
+
+# --- Main Interface ---
 uploaded_file = st.file_uploader("Upload DOCX/PDF", type=['docx', 'pdf'])
 
 if uploaded_file:
-    text = read_file(uploaded_file)
-    if text:
+    st.session_state.error_message = None # Clear previous error
+    text, read_error = read_document_file(uploaded_file)
+    if read_error:
+        st.session_state.error_message = read_error
+        st.error(read_error)
+        st.session_state.pdf_bytes = None # Disable download button
+    elif text:
         preview_content = []
-        processed = process_text(text)
-
-        for bold, normal in processed:
+        processed_preview = process_text_for_preview(text)
+        for bold, normal in processed_preview:
             preview_content.append(
                 f'<span style="font-family: {st.session_state.settings["current_font"]}; '
                 f'font-size: {st.session_state.settings["text_size"]}pt; '
@@ -181,24 +172,20 @@ if uploaded_file:
                 f'color: {st.session_state.settings["text_color"]};">'
                 f'<b>{bold}</b>{normal}</span>'
             )
-
         st.markdown(
             f'<div style="background:{st.session_state.settings["bg_color"]};padding:20px;border-radius:10px;">'
             f'{"".join(preview_content)}</div>',
             unsafe_allow_html=True
         )
 
-        # PDF is generated automatically whenever settings or text changes
-        st.session_state.pdf_bytes = create_pdf(text, st.session_state.settings)
-
-
-# Instructions sidebar
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("**Instructions**")
-    st.markdown("1. Upload document\n2. Adjust settings\n3. Preview updates automatically\n4. Download PDF")
-    st.sidebar.download_button(
-                "Download PDF",
-                st.session_state.pdf_bytes,
-                "document.pdf",
-                "application/pdf"
+        try:
+            st.session_state.pdf_bytes = create_pdf_document(text, st.session_state.settings)
+        except Exception as e:
+            st.session_state.error_message = f"Error generating PDF: {e}"
+            st.error(st.session_state.error_message)
+            st.session_state.pdf_bytes = None # Disable download button
+    else:
+        st.session_state.pdf_bytes = None # No text, disable download button
+else:
+    if st.session_state.error_message:
+        st.error(st.session_state.error_message) # Show persistent error message if any
