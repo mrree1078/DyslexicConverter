@@ -65,6 +65,21 @@ def process_text_for_preview(text):
 
 # --- PDF Generation ---
 def create_pdf_document(text, settings):
+    if uploaded_file:
+    st.session_state.error_message = None # Clear previous error
+    text, read_error = read_document_file(uploaded_file)
+    if read_error:
+        st.session_state.error_message = read_error
+        st.error(read_error)
+        st.session_state.pdf_bytes = None # Disable download button
+    elif text:
+        st.write("**Debugging: About to call create_pdf_document...**") # NEW DEBUG LINE - Right before call
+        preview_content = []
+        processed_preview = process_text_for_preview(text)
+        # ... (rest of your preview rendering code - keep it) ...
+
+        st.write("**Debugging: Calling create_pdf_document NOW...") # DEBUG LINE - Keep this one as well
+        pdf_bytes = create_pdf_document(text, st.session_state.settings)
     st.write("**Debugging create_pdf_document: STARTING PDF GENERATION**") # DEBUG LINE
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
