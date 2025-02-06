@@ -10,7 +10,6 @@ from reportlab.lib.enums import TA_LEFT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
-from reportlab.pdfgen import canvas  # Import for minimal PDF
 
 # --- Initialize session state ---
 if 'settings' not in st.session_state:
@@ -34,7 +33,7 @@ COLOR_FILTERS = {
     'Dark Mode': ('#FFFFFF', '#1A1A1A')
 }
 
-FONT_OPTIONS = ['Arial'] # Arial only as per user's latest code
+FONT_OPTIONS = ['Arial'] # Arial only as per user's request - can be expanded
 
 # --- Font Configuration ---
 def configure_fonts_app():
@@ -46,7 +45,7 @@ def configure_fonts_app():
 
 # --- Text Processing ---
 def process_word_app(word):
-    clean_word = re.sub(r'\W+|\W+$', '', word)
+    clean_word = re.sub(r'^\W+|\W+$', '', word)
     if not clean_word:
         return (word, '')
     split = (len(clean_word) + 1) // 2
@@ -64,65 +63,54 @@ def process_text_for_preview(text):
             processed_text.append(process_word_app(word))
     return processed_text
 
-# --- MINIMAL PDF Generation (for download button test) ---
-def create_minimal_pdf():
-    st.write("**Debugging: create_minimal_pdf() - START**") # Debugging line
+# --- PDF Generation ---
+def create_pdf_document(text, settings):
+    """PDF generation with character spacing, no margins"""
     buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    p.drawString(100, 750, "Hello, World! Minimal PDF from Full App Test.") # Slightly different text
-    p.save()
-    pdf_bytes = buffer.getvalue()
-    st.write("**Debugging: create_minimal_pdf() - PDF bytes generated**") # Debugging line
-    return pdf_bytes
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+    )
 
-# --- Original PDF Generation (commented out for now) ---
-# def create_pdf_document(text, settings):
-#     """PDF generation with character spacing, no margins"""
-#     buffer = io.BytesIO()
-#     doc = SimpleDocTemplate(
-#         buffer,
-#         pagesize=letter,
-#     )
+    style = ParagraphStyle(
+        'MainStyle',
+        fontName=settings['current_font'],
+        fontSize=settings['text_size'],
+        leading=settings['text_size'] * settings['line_spacing'],
+        textColor=HexColor(settings['text_color']),
+        backColor=HexColor(settings['bg_color']),
+        alignment=TA_LEFT,
+        splitLongWords=False,
+        spaceBefore=settings['text_size'] * 0.5,
+        charSpace=settings['char_spacing']
+    )
 
-#     style = ParagraphStyle(
-#         'MainStyle',
-#         fontName=settings['current_font'],
-#         fontSize=settings['text_size'],
-#         leading=settings['text_size'] * settings['line_spacing'],
-#         textColor=HexColor(settings['text_color']),
-#         backColor=HexColor(settings['bg_color']),
-#         alignment=TA_LEFT,
-#         splitLongWords=False,
-#         spaceBefore=settings['text_size'] * 0.5,
-#         charSpace=settings['char_spacing'] # Character spacing setting is here
-#     )
+    content = []
+    paragraphs = text.split("\n\n")
 
-#     content = []
-#     paragraphs = text.split("\n\n")
+    for para_text in paragraphs:
+        processed_words = []
+        words = re.findall(r'\S+|\s+', para_text)
+        for word in words:
+            if word.strip() == '':
+                processed_words.append(word)
+            else:
+                bold, normal = process_word_app(word)
+                processed_words.append(f'<font name="{settings["current_font"]}-Bold">{bold}</font>{normal}')
 
-#     for para_text in paragraphs:
-#         processed_words = []
-#         words = re.findall(r'\S+|\s+', para_text)
-#         for word in words:
-#             if word.strip() == '':
-#                 processed_words.append(word)
-#             else:
-#                 bold, normal = process_word_app(word)
-#                 processed_words.append(f'<font name="{settings["current_font"]}-Bold">{bold}</font>{normal}')
+        paragraph_content = ''.join(processed_words)
+        content.append(Paragraph(paragraph_content, style))
+        content.append(Spacer(1, 6))
 
-#         paragraph_content = ''.join(processed_words)
-#         content.append(Paragraph(paragraph_content, style))
-#         content.append(Spacer(1, 6))
+    def add_background(canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(HexColor(settings['bg_color']))
+        canvas.rect(0, 0, doc.width, doc.height, fill=1)
+        canvas.restoreState()
 
-#     def add_background(canvas, doc):
-#         canvas.saveState()
-#         canvas.setFillColor(HexColor(settings['bg_color']))
-#         canvas.rect(0, 0, doc.width, doc.height, fill=1)
-#         canvas.restoreState()
-
-#     doc.build(content, onFirstPage=add_background, onLaterPages=add_background)
-#     buffer.seek(0)
-#     return buffer.getvalue()
+    doc.build(content, onFirstPage=add_background, onLaterPages=add_background)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def read_document_file(uploaded_file):
@@ -140,7 +128,7 @@ def read_document_file(uploaded_file):
         else:
             error = "Unsupported file type. Please upload DOCX or PDF."
     except Exception as e:
-        error = f"Error reading file: {e}"  # Removed the extra ')' here
+        error = f"Error reading file: {e}"
     return text, error
 
 # --- Streamlit UI ---
@@ -168,7 +156,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("**Instructions**")
-    st.markdown("1. Upload document\n2. Adjust settings\n3. Preview updates automatically (preview will not reflect PDF content in this test)\n4. Download PDF") # Modified instruction
+    st.markdown("1. Upload document\n2. Adjust settings\n3. Preview updates automatically\n4. Download PDF")
+
 
 # --- Main Interface ---
 uploaded_file = st.file_uploader("Upload DOCX/PDF", type=['docx', 'pdf'])
@@ -198,11 +187,8 @@ if uploaded_file:
             unsafe_allow_html=True
         )
 
-        st.write("**Debugging: Calling create_minimal_pdf() NOW...") # Debugging line - Changed to minimal PDF
-        pdf_bytes = create_minimal_pdf() # Changed to minimal PDF function
-        st.write("**Debugging: create_minimal_pdf() RETURNED, pdf_bytes is:", pdf_bytes is not None) # Debugging line
-        st.session_state.pdf_bytes = pdf_bytes # Assign pdf_bytes to session state
-        st.write("**Debugging: st.session_state.pdf_bytes AFTER ASSIGNMENT is:", st.session_state.pdf_bytes is not None) # Debugging line
+        # PDF is generated automatically whenever settings or text changes
+        st.session_state.pdf_bytes = create_pdf_document(text, st.session_state.settings)
     else:
         st.session_state.pdf_bytes = None # No text, disable download button
 else:
