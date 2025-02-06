@@ -140,7 +140,7 @@ def read_document_file(uploaded_file):
         else:
             error = "Unsupported file type. Please upload DOCX or PDF."
     except Exception as e:
-        error = f"Error reading file: {e}")
+        error = f"Error reading file: {e}"  # Removed the extra ')' here
     return text, error
 
 # --- Streamlit UI ---
