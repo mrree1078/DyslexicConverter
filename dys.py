@@ -25,17 +25,19 @@ if 'settings' not in st.session_state:
 COLOR_FILTERS = {
     'Default': ('#000000', '#FFFFFF'),
     'Cream': ('#000000', '#FFFFEA'),
-    'Soft Pink': ('#003366', '#E6F0FF'),
+    'Soft Blue': ('#003366', '#E6F0FF'),
     'Dark Mode': ('#FFFFFF', '#1A1A1A')
 }
 
-FONT_OPTIONS = ['Arial']
+FONT_OPTIONS = ['Arial', 'OpenDyslexic', 'ComicSans']
 
 def configure_fonts():
     """Register fonts with fallback handling"""
     try:
         pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf'))
         pdfmetrics.registerFont(TTFont('Arial-Bold', 'arialbd.ttf'))
+        pdfmetrics.registerFont(TTFont('OpenDyslexic', 'OpenDyslexic-Regular.otf'))
+        pdfmetrics.registerFont(TTFont('ComicSans', 'comic.ttf'))
     except:
         st.warning("Some fonts not found - using defaults")
 
@@ -52,6 +54,8 @@ def process_word(word):
 
 def create_pdf(text, settings):
     """PDF generation with character spacing, no margins"""
+    st.write("**Debugging: create_pdf() function is being called**") # DEBUG LINE
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -68,7 +72,7 @@ def create_pdf(text, settings):
         alignment=TA_LEFT,
         splitLongWords=False,
         spaceBefore=settings['text_size'] * 0.5,
-        charSpace=settings['char_spacing'] # Character spacing setting is here
+        charSpace=settings['char_spacing']
     )
 
     content = []
@@ -96,7 +100,9 @@ def create_pdf(text, settings):
 
     doc.build(content, onFirstPage=add_background, onLaterPages=add_background)
     buffer.seek(0)
-    return buffer.getvalue()
+    pdf_bytes = buffer.getvalue()
+    st.write("**Debugging: create_pdf() function finished, PDF bytes generated**") # DEBUG LINE
+    return pdf_bytes # Return the bytes directly
 
 
 def read_file(uploaded_file):
@@ -139,7 +145,7 @@ def process_text(text):
 
 
 # Streamlit UI
-st.title("Dyslexic Document Converter")
+st.title("Accessibility Document Converter")
 configure_fonts()
 
 # Sidebar controls
@@ -169,6 +175,7 @@ uploaded_file = st.file_uploader("Upload DOCX/PDF", type=['docx', 'pdf'])
 if uploaded_file:
     text = read_file(uploaded_file)
     if text:
+        st.write("**Debugging: File uploaded and text extracted successfully**") # DEBUG LINE
         preview_content = []
         processed = process_text(text)
 
@@ -188,16 +195,22 @@ if uploaded_file:
             unsafe_allow_html=True
         )
 
-        # PDF is generated automatically whenever settings or text changes
-        st.session_state.pdf_bytes = create_pdf(text, st.session_state.settings)
+        st.write("**Debugging: Calling create_pdf() now...**") # DEBUG LINE
+        pdf_bytes = create_pdf(text, st.session_state.settings) # Get bytes directly
+        st.session_state.pdf_bytes = pdf_bytes # Store in session state
+        st.write("**Debugging: pdf_bytes value after create_pdf():**", st.session_state.pdf_bytes is not None) # DEBUG LINE
 
-        if 'pdf_bytes' in st.session_state:
+
+        if 'pdf_bytes' in st.session_state and st.session_state.pdf_bytes: # Check pdf_bytes is not None and truthy
+            st.write("**Debugging: pdf_bytes is valid, rendering download button**") # DEBUG LINE
             st.sidebar.download_button(
                 "Download PDF",
                 st.session_state.pdf_bytes,
                 "document.pdf",
                 "application/pdf"
             )
+        else:
+            st.write("**Debugging: pdf_bytes is NOT valid, download button NOT shown**") # DEBUG LINE
 
 # Instructions sidebar
 with st.sidebar:
